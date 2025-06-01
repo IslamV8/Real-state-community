@@ -64,10 +64,10 @@ exports.deleteMessage = async (req, res) => {
     if (!message) return res.status(404).json({ error: "Message not found" });
 
     const userId = req.user.userId;
-    const deleteType = req.body.type || "me"; // default = delete for me
+    const deleteType = req.body.type || "me"; 
 
     if (deleteType === "everyone") {
-      // بس الراسل هو اللي يقدر يحذف من عند الكل
+      
       if (message.sender.toString() !== userId) {
         return res.status(403).json({ error: "Only sender can delete for everyone" });
       }
@@ -80,7 +80,7 @@ exports.deleteMessage = async (req, res) => {
       return res.status(200).json({ message: "Message deleted for everyone" });
     }
 
-    // Delete for current user only
+    
     if (message.sender.toString() === userId) {
       message.isDeletedBySender = true;
     } else if (message.receiver.toString() === userId) {
