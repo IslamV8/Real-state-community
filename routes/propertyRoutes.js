@@ -1,6 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const auth = require("../middlewares/authMiddleware");
+const { protect } = require("../middlewares/authMiddleware");
+const { validateBody }   = require("../middlewares/validateBody");
+
+
+const { propertySchema } = require("../validation/schemas");
+
 const {
   createProperty,
   getAllProperties,
@@ -9,10 +14,11 @@ const {
   deleteProperty
 } = require("../controllers/propertyController");
 
-router.post("/", auth, createProperty);
+
+router.post(  "/",  protect,  validateBody(propertySchema),  createProperty);
 router.get("/", getAllProperties);
 router.get("/:id", getSingleProperty);
-router.put("/:id", auth, updateProperty);
-router.delete("/:id", auth, deleteProperty);
+router.put(  "/:id",  protect,  validateBody(propertySchema),  updateProperty);
+router.delete("/:id", protect, deleteProperty);
 
 module.exports = router;

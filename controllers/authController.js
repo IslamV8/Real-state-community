@@ -31,7 +31,7 @@ exports.register = async (req, res) => {
 
 
     const token = jwt.sign(
-      { userId: user._id, username: user.username },
+      { userId: user._id, username: user.username, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -56,14 +56,22 @@ exports.login = async (req, res) => {
     if (!isMatch) return res.status(400).json({ error: "Invalid credentials" });
 
     const token = jwt.sign(
-      { userId: user._id, username: user.username },
+      { userId: user._id, username: user.username, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    res.status(200).json({ token, user: { id: user._id, username, displayName: user.displayName, email: user.email } });
+    res.status(200).json({ token, user: { id: user._id, username, displayName: user.displayName, email: user.email, role: user.role } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
   }
+
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+req.user = {
+  userId: decoded.userId,
+  username: decoded.username,
+  role: decoded.role
+};
+
 };

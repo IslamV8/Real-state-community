@@ -26,7 +26,7 @@ exports.sendMessage = async (req, res) => {
 };
 
 
-exports.getMessages = async (req, res) => {
+exports.getMessagesBetweenUsers = async (req, res) => {
     try {
         const userId = req.user.userId;
 
@@ -58,7 +58,7 @@ exports.getMessages = async (req, res) => {
 };
 
 
-exports.deleteMessage = async (req, res) => {
+exports.deleteMessageForUser = async (req, res) => {
   try {
     const message = await Message.findById(req.params.id);
     if (!message) return res.status(404).json({ error: "Message not found" });
