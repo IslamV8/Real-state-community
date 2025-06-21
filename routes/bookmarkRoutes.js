@@ -1,9 +1,16 @@
 const express = require("express");
 const router = express.Router();
 const { protect } = require("../middlewares/authMiddleware");
-const { toggleBookmark, getMyBookmarks } = require("../controllers/bookmarkController");
+const { validateBody } = require("../middlewares/validateBody");
+const { bookmarkSchema } = require("../validation/schemas");
+const {
+  addBookmark,
+  getBookmarksForUser,
+  removeBookmark
+} = require("../controllers/bookmarkController");
 
-router.post("/", protect, toggleBookmark);
-router.get("/", protect, getMyBookmarks);
+router.post("/", protect, validateBody(bookmarkSchema), addBookmark);
+router.get("/", protect, getBookmarksForUser);
+router.delete("/:id", protect, removeBookmark);
 
 module.exports = router;

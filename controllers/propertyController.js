@@ -1,5 +1,5 @@
 const Property = require("../models/Property");
-
+const cloudinary = require("../config/cloudinary");
 
 
 exports.createProperty = async (req, res) => {
@@ -19,40 +19,44 @@ exports.createProperty = async (req, res) => {
 
 exports.getAllProperties = async (req, res) => {
   try {
-   
+
     const page  = parseInt(req.query.page,  10) || 1;
     const limit = parseInt(req.query.limit, 10) || 10;
     const skip  = (page - 1) * limit;
 
-    
+
     const query = {};
-    if (req.query.state)   query.state   = req.query.state;
-    if (req.query.city)    query.city    = req.query.city;
-    if (req.query.type)    query.type    = req.query.type;
-    if (req.query.forSale !== undefined)
+    if (req.query.state)    query.state    = req.query.state;
+    if (req.query.city)     query.city     = req.query.city;
+    if (req.query.type)     query.type     = req.query.type;
+    if (req.query.forSale !== undefined) {
       query.forSale = req.query.forSale === "true";
+    }
     if (req.query.minPrice || req.query.maxPrice) {
       query.price = {};
       if (req.query.minPrice) query.price.$gte = Number(req.query.minPrice);
       if (req.query.maxPrice) query.price.$lte = Number(req.query.maxPrice);
     }
 
-    
-    const properties = await Property.find(query)
-      .populate("createdBy", "username displayName")
-      .sort({ createdAt: -1 })
-      .skip(skip)       
-      .limit(limit);    
 
-    
-    const total = await Property.countDocuments(query);
+    const [properties, total] = await Promise.all([
+      Property.find(query)
+        .populate("createdBy", "username displayName")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Property.countDocuments(query)
+    ]);
+
+
     const totalPages = Math.ceil(total / limit);
 
+ 
     res.status(200).json({
       page,
       totalPages,
-      totalItems: total,
-      itemsOnPage: properties.length,
+      totalItems: properties.length,
+      totalProperties: total,
       properties
     });
   } catch (err) {
@@ -117,6 +121,23 @@ exports.deleteProperty = async (req, res) => {
     await property.deleteOne();
     res.status(200).json({ message: "Property deleted successfully" });
   } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+exports.uploadImages = async (req, res) => {
+  try {
+    const property = await Property.findById(req.params.id);
+    if (!property) {
+      return res.status(404).json({ error: "Property not found" });
+    }
+    const urls = req.files.map(f => f.path);
+    
+    property.images = property.images.concat(urls);
+    await property.save();
+    res.status(200).json(property);
+  } catch (err) {
+    console.error("🚨 uploadImages Error:", err);
     res.status(500).json({ error: "Server error" });
   }
 };

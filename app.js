@@ -25,6 +25,10 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/messages", messageRoutes);
 
 
+const errorHandler = require("./middlewares/errorHandler");
+app.use(errorHandler);
+
+
 //tennis route
 app.get("/ping", (req, res) => {
   res.status(200).json({ message: "pong" });

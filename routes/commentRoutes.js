@@ -1,4 +1,5 @@
-const router = require("express").Router();
+const express = require("express");
+const router = express.Router();
 const { protect } = require("../middlewares/authMiddleware");
 const { validateBody } = require("../middlewares/validateBody");
 const { commentSchema } = require("../validation/schemas");
