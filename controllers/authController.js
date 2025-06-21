@@ -1,41 +1,32 @@
-const jwt    = require("jsonwebtoken");
-const User   = require("../models/User");
+const User = require("../models/User");
+const bcrypt = require("bcryptjs");
 
 exports.register = async (req, res) => {
   try {
     const { username, displayName, email, password } = req.body;
 
- 
-    const exists = await User.findOne({ 
-      $or: [{ username }, { email }] 
-    });
+    const exists = await User.findOne({ $or: [{ username }, { email }] });
     if (exists) {
       return res
         .status(400)
         .json({ error: "Username or email already in use" });
     }
 
-
     const user = new User({ username, displayName, email, password });
     await user.save();
 
-
-    const token = jwt.sign(
-      { userId: user._id, username: user.username, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
+    req.session.user = {
+      id: user._id,
+      username: user.username,
+      role: user.role,
+    };
 
     res.status(201).json({
-      token,
-      user: {
-        id:          user._id,
-        username:    user.username,
-        displayName: user.displayName,
-        email:       user.email,
-        role:        user.role
-      }
+      id: user._id,
+      username: user.username,
+      displayName: user.displayName,
+      email: user.email,
+      role: user.role,
     });
   } catch (err) {
     console.error("🚨 register error:", err);
@@ -46,39 +37,38 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { username, password } = req.body;
-
-
     const user = await User.findOne({ username });
-    if (!user) {
+    if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(400).json({ error: "Invalid credentials" });
     }
 
- 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(400).json({ error: "Invalid credentials" });
-    }
+    req.session.user = {
+      id: user._id,
+      username: user.username,
+      role: user.role,
+    };
 
-
-    const token = jwt.sign(
-      { userId: user._id, username: user.username, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-
-    res.status(200).json({
-      token,
-      user: {
-        id:          user._id,
-        username:    user.username,
-        displayName: user.displayName,
-        email:       user.email,
-        role:        user.role
-      }
+    res.json({
+      id: user._id,
+      username: user.username,
+      displayName: user.displayName,
+      email: user.email,
+      role: user.role,
     });
   } catch (err) {
     console.error("🚨 login error:", err);
     res.status(500).json({ error: "Server error" });
   }
+};
+
+exports.logout = (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      console.error("🚨 logout error:", err);
+      return res.status(500).json({ error: "Could not log out" });
+    }
+
+    res.clearCookie("sid");
+    res.json({ message: "Logged out successfully" });
+  });
 };
