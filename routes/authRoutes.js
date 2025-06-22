@@ -7,9 +7,22 @@ const {
   authLoginSchema,
 } = require("../validation/schemas");
 const { protect } = require("../middlewares/authMiddleware");
+const {
+  forgotPassword,
+  resetPassword,
+} = require("../controllers/authController");
+const Joi = require("joi");
+
+const forgotSchema = Joi.object({ email: Joi.string().email().required() });
+const resetSchema = Joi.object({
+  token: Joi.string().required(),
+  newPassword: Joi.string().min(6).required(),
+});
 
 router.post("/register", validateBody(authRegisterSchema), register);
 router.post("/login", validateBody(authLoginSchema), login);
 router.post("/logout", protect, logout);
+router.post("/forgot-password", validateBody(forgotSchema), forgotPassword);
+router.post("/reset-password", validateBody(resetSchema), resetPassword);
 
 module.exports = router;
