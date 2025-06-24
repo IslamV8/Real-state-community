@@ -53,3 +53,10 @@ exports.messageSchema = Joi.object({
   receiverId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required(),
   content:    Joi.string().required()
 });
+
+exports.changePassSchema = Joi.object({
+  oldPassword:     Joi.string().required(),
+  newPassword:     Joi.string().min(6).required(),
+  confirmPassword: Joi.any().valid(Joi.ref('newPassword')).required()
+    .messages({ 'any.only': 'confirmPassword must match newPassword' })
+});
