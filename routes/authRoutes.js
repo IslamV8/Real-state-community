@@ -11,6 +11,7 @@ const {
   forgotPassword,
   resetPassword,
 } = require("../controllers/authController");
+const { changePassword } = require("../controllers/authController");
 const Joi = require("joi");
 
 const forgotSchema = Joi.object({ email: Joi.string().email().required() });
@@ -24,5 +25,6 @@ router.post("/login", validateBody(authLoginSchema), login);
 router.post("/logout", protect, logout);
 router.post("/forgot-password", validateBody(forgotSchema), forgotPassword);
 router.post("/reset-password", validateBody(resetSchema), resetPassword);
+router.post("/change-password", protect, changePassword);
 
 module.exports = router;

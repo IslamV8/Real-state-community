@@ -133,3 +133,38 @@ exports.resetPassword = async (req, res) => {
 
   res.json({ message: "Password has been reset successfully." });
 };
+
+exports.changePassword = async (req, res) => {
+  const { oldPassword, newPassword, confirmPassword } = req.body;
+  
+  if (!oldPassword || !newPassword || !confirmPassword) {
+    return res.status(400).json({ error: "Please provide all fields." });
+  }
+
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ error: "Passwords do not match." });
+  }
+
+  try {
+    const user = await User.findById(req.user.id); 
+
+    
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: "Old password is incorrect." });
+    }
+
+    
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({ message: "Password updated successfully." });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Server error." });
+  }
+};
