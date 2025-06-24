@@ -77,10 +77,7 @@ exports.logout = (req, res) => {
 
 exports.forgotPassword = async (req, res) => {
   const { email } = req.body;
-  if (process.env.NODE_ENV === "test") {
-    return res.json({ message: "Reset link sent to your email." });
-  }
-
+  
   const user = await User.findOne({ email });
   if (!user) {
     return res.status(200).json({

@@ -14,6 +14,7 @@ const { validateBody } = require("../middlewares/validateBody");
 const {
   authRegisterSchema,
   authLoginSchema,
+  changePassSchema
 } = require("../validation/schemas");
 
 const { protect } = require("../middlewares/authMiddleware");

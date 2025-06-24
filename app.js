@@ -14,43 +14,20 @@ app.use(
 );
 app.use(cookieParser());
 
-const sessOpts = {
-  name:              "sid",
-  secret:            process.env.SESSION_SECRET,
-  resave:            false,
+
+app.use(session({
+  name:     "sessionId",                     
+  secret:   process.env.SESSION_SECRET,
+  resave:   false,
   saveUninitialized: false,
+  store:    MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
   cookie: {
     httpOnly: true,
-    secure:   process.env.NODE_ENV === "production",
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge:   7 * 24 * 60 * 60 * 1000
+    maxAge: 7 * 24 * 60 * 60 * 1000    
   }
-};
-
-
-if (process.env.NODE_ENV === "test") {
-  // During Jest tests, use the built-in (in-memory) store
-  app.use(session(sessOpts));
-} else {
-  // In development/production, persist sessions in Mongo
-  app.use(session({
-    ...sessOpts,
-    store: MongoStore.create({ mongoUrl: process.env.MONGO_URI })
-  }));
-}
-// app.use(session({
-//   name:     "sessionId",                     
-//   secret:   process.env.SESSION_SECRET,
-//   resave:   false,
-//   saveUninitialized: false,
-//   store:    MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
-//   cookie: {
-//     httpOnly: true,
-//     secure: process.env.NODE_ENV === "production",
-//     sameSite: "lax",
-//     maxAge: 7 * 24 * 60 * 60 * 1000    
-//   }
-// }));
+}));
 
 const authRoutes = require("./routes/authRoutes");
 const propertyRoutes = require("./routes/propertyRoutes");
