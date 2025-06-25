@@ -13,8 +13,8 @@ const {
 } = require("../controllers/propertyController");
 const upload = require("../middlewares/upload");
 
-router.get("/", protect, getAllProperties);
-router.get("/:id", protect, getSingleProperty);
+router.get("/", getAllProperties);
+router.get("/:id", getSingleProperty);
 router.post("/", protect, validateBody(propertySchema), createProperty);
 router.put("/:id", protect, validateBody(propertySchema), updateProperty);
 router.delete("/:id", protect, deleteProperty);
