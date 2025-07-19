@@ -1,6 +1,7 @@
-# Real Estate Community API
+# README Additions (Supplemental Documentation)
 
-A RESTful backend for a real-estate community platform (properties, comments, likes, bookmarks, messaging, admin moderation). Session-based authentication with HTTP-only cookies.
+> This file contains the missing documentation sections to append to the existing `readme.md`.
+> Environment variable *values* are intentionally omitted (only names referenced where needed).
 
 ---
 
@@ -12,415 +13,177 @@ A RESTful backend for a real-estate community platform (properties, comments, li
 | Database | MongoDB + Mongoose |
 | Auth | express-session (cookie-based) |
 | Validation | Joi |
-| Uploads | Multer + Cloudinary |
-| Security | bcrypt, cors, cookie-parser |
+| File Upload | Multer + Cloudinary |
+| Security | bcrypt, (helmet recommended), cors, cookie-parser |
 | Logging | morgan (dev) |
+| Testing (planned) | Jest + Supertest |
 
 ---
 
-## Installation
+## Installation & Run
 ```bash
 git clone <repo-url>
 cd real-state-community
 npm install
 npm run dev
 ```
-Default port: 5000 (override with PORT).
-
----
-
-## Environment Variables (names only)
-`MONGODB_URI`, `SESSION_SECRET`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`, `APP_BASE_URL`, `FRONTEND_ORIGIN`, `NODE_ENV`.
+Default port: 5000 (override with `PORT`).
 
 ---
 
 ## Authentication Flow
-1. Register / login returns user JSON + sets `sid` HttpOnly cookie (`SameSite=Lax`, add `Secure` in production).  
-2. Subsequent requests send cookie automatically.  
-3. Logout destroys session.  
-4. Forgot password issues short-lived reset token (email).  
-5. Reset password verifies token, updates hash, invalidates token.  
-6. Session expiry via `cookie.maxAge` (e.g. 7 days).
+1. Register / login returns user JSON and sets `sid` HttpOnly cookie (`SameSite=Lax`; add `Secure` in production).
+2. Client automatically sends cookie on subsequent requests (use `credentials: "include"` or `withCredentials: true`).
+3. Protected routes read `req.session.user`.
+4. Logout destroys session.
+5. Forgot password issues a one-time, short-lived reset token via email.
+6. Reset password validates token, updates hashed password, invalidates token.
+7. Session expiry controlled by `cookie.maxAge` (e.g. 7d).
 
 ---
 
-## Authentication Routes (`/api/auth`)
+## API Endpoints Overview
+Sections below document request/response bodies (examples abbreviated).
 
-### `POST /api/auth/register`
-Request:
-```json
-{ "username":"johndoe", "displayName":"John Doe", "email":"john@example.com", "password":"secret123" }
-```
-Response (201):
-```json
-{ "id":"<id>", "username":"johndoe", "displayName":"John Doe", "email":"john@example.com", "role":"user" }
-```
+### Authentication (/api/auth)
+| Method | Path | Action |
+|--------|------|--------|
+| POST | /api/auth/register | Create user & session |
+| POST | /api/auth/login | Authenticate user |
+| POST | /api/auth/logout | Destroy session |
+| POST | /api/auth/forgot-password | Send reset link |
+| POST | /api/auth/reset-password | Reset password |
 
-### `POST /api/auth/login`
-Request:
-```json
-{ "username":"johndoe", "password":"secret123" }
-```
-Response (200): same shape as register.
+### Properties (/api/properties)
+| Method | Path | Action |
+|--------|------|--------|
+| GET | /api/properties | List (filter + paginate) |
+| GET | /api/properties/:id | Get single |
+| POST | /api/properties | Create |
+| PUT | /api/properties/:id | Update |
+| DELETE | /api/properties/:id | Delete |
+| POST | /api/properties/:id/images | Upload up to 5 images |
 
-### `POST /api/auth/logout`
-Response:
-```json
-{ "message":"Logged out successfully" }
-```
+### Comments (/api/comments)
+| Method | Path | Action |
+|--------|------|--------|
+| POST | /api/comments/:propertyId | Create comment |
+| GET | /api/comments/:propertyId | List comments |
+| PUT | /api/comments/:id | Update comment |
+| DELETE | /api/comments/:id | Delete own comment |
 
-### `POST /api/auth/forgot-password`
-Request:
-```json
-{ "email":"john@example.com" }
-```
-Response:
-```json
-{ "message":"Reset link sent to your email." }
-```
+### Likes (/api/likes)
+| Method | Path | Action |
+|--------|------|--------|
+| POST | /api/likes | Toggle like |
+| GET | /api/likes/property/:propertyId | List likes |
+| DELETE | /api/likes/:id | Remove like |
 
-### `POST /api/auth/reset-password`
-Request:
-```json
-{ "token":"<token>", "newPassword":"newSecret123" }
-```
-Response:
-```json
-{ "message":"Password has been reset successfully." }
-```
+### Bookmarks (/api/bookmarks)
+| Method | Path | Action |
+|--------|------|--------|
+| POST | /api/bookmarks | Create bookmark |
+| GET | /api/bookmarks | List own bookmarks |
+| DELETE | /api/bookmarks/:id | Remove bookmark |
 
-### User Object Schema
-| Field | Type | Notes |
-|-------|------|-------|
-| `_id` | ObjectId | Identifier |
-| `username` | String | Unique |
-| `displayName` | String | Optional |
-| `email` | String | Unique |
-| `role` | String (user|admin) | Authorization |
-| `createdAt` | Date | Timestamp |
-| `updatedAt` | Date | Timestamp |
+### Messages (/api/messages)
+| Method | Path | Action |
+|--------|------|--------|
+| POST | /api/messages | Send message |
+| GET | /api/messages/:withUserId | Conversation (two users) |
+| DELETE | /api/messages/:id | Soft delete (record deletion) |
 
-Example:
-```json
-{ "_id":"665fa112...", "username":"johndoe", "displayName":"John Doe", "email":"john@example.com", "role":"user", "createdAt":"2025-07-01T09:50:00.000Z", "updatedAt":"2025-07-05T14:10:22.000Z" }
-```
-
----
-
-## Property Routes (`/api/properties`)
-
-### `GET /api/properties`
-Query params: `page`, `limit`, `state`, `city`, `type`, `forSale`, `minPrice`, `maxPrice`, `sort` (e.g. `-createdAt`, `price`).  
-Response:
-```json
-{
-  "page":1,
-  "totalPages":5,
-  "totalItems":42,
-  "itemsOnPage":10,
-  "properties":[ /* property objects */ ]
-}
-```
-
-### `GET /api/properties/:id`
-Response:
-```json
-{ /* property object */ }
-```
-
-### `POST /api/properties`
-Request:
-```json
-{
-  "title":"Cozy Apartment",
-  "description":"2-bed in downtown",
-  "price":120000,
-  "city":"Austin",
-  "state":"Texas",
-  "type":"apartment",
-  "forSale":true,
-  "images":[]
-}
-```
-Response (201): created object.
-
-### `PUT /api/properties/:id`
-Partial update:
-```json
-{ "price":125000, "forSale":false }
-```
-
-### `DELETE /api/properties/:id`
-Response:
-```json
-{ "message":"Property deleted successfully" }
-```
-
-### `POST /api/properties/:id/images`
-Multipart (key: `images`, up to 5 files). Returns updated property.
-
-### Property Object Schema
-| Field | Type | Notes |
-|-------|------|------|
-| `_id` | ObjectId | Identifier |
-| `title` | String | Required |
-| `description` | String | Required |
-| `price` | Number | Required |
-| `type` | String enum | `apartment|house|villa|building|store` |
-| `city` | String | Required |
-| `state` | String enum | US state |
-| `images` | String[] | Max 5 |
-| `forSale` | Boolean | Default `true` (`false` = rent) |
-| `createdBy` | ObjectId (User) | Owner reference |
-| `createdAt` | Date | Timestamp |
-| `updatedAt` | Date | Timestamp |
-
-Example:
-```json
-{
-  "_id":"665fa8f2...",
-  "title":"Cozy Apartment",
-  "description":"2-bed in downtown",
-  "price":120000,
-  "type":"apartment",
-  "city":"Austin",
-  "state":"Texas",
-  "images":["https://.../prop1.jpg"],
-  "forSale":true,
-  "createdBy":"665fa112...",
-  "createdAt":"2025-07-01T10:15:20.000Z",
-  "updatedAt":"2025-07-05T14:42:10.000Z"
-}
-```
+### Admin (/api/admin)
+| Method | Path | Action |
+|--------|------|--------|
+| GET | /api/admin/users | List users |
+| PUT | /api/admin/users/:id/promote | Promote user |
+| PUT | /api/admin/users/:id/demote | Demote admin |
+| DELETE | /api/admin/users/:id | Delete user |
+| DELETE | /api/admin/property/:id | Delete property |
+| DELETE | /api/admin/comment/:id | Delete comment |
+| DELETE | /api/admin/message/:id | Delete message |
 
 ---
 
-## Comment Routes (`/api/comments`)
+## Object Schemas (Response Shapes)
 
-### `POST /api/comments/:propertyId`
-Request:
-```json
-{ "content":"Looks great!" }
-```
-Response (201): comment object.
-
-### `GET /api/comments/:propertyId`
-Response:
-```json
-[ /* comments */ ]
-```
-
-### `PUT /api/comments/:id`
-Request:
-```json
-{ "content":"Updated comment" }
-```
-
-### `DELETE /api/comments/:id`
-Response:
-```json
-{ "message":"Deleted" }
-```
-
-### Comment Object Schema
-| Field | Type | Notes |
-|-------|------|-------|
-| `_id` | ObjectId | Identifier |
-| `property` | ObjectId (Property) | Reference |
-| `user` | ObjectId (User) | Author |
-| `content` | String | Required |
-| `createdAt` | Date | Timestamp |
-| `updatedAt` | Date | Timestamp |
-
-Example:
+### User
 ```json
 {
-  "_id":"66a1c0f2...",
-  "property":"665fa8f2...",
-  "user":"665fa112...",
-  "content":"Looks great!",
-  "createdAt":"2025-07-10T12:30:11.000Z",
-  "updatedAt":"2025-07-10T12:30:11.000Z"
+  "_id": "665fa112...",
+  "username": "johndoe",
+  "displayName": "John Doe",
+  "email": "john@example.com",
+  "role": "user",
+  "createdAt": "2025-07-01T09:50:00.000Z",
+  "updatedAt": "2025-07-05T14:10:22.000Z"
 }
 ```
 
----
-
-## Like Routes (`/api/likes`)
-
-### `POST /api/likes`
-Request:
-```json
-{ "propertyId":"665fa8f2..." }
-```
-Response:
-```json
-{ "liked":true, "likeId":"66a1c3f9..." }
-```
-
-### `GET /api/likes/property/:propertyId`
-Response:
-```json
-[ /* like objects */ ]
-```
-
-### `DELETE /api/likes/:id`
-Response:
-```json
-{ "message":"Like removed" }
-```
-
-### Like Object Schema
-| Field | Type | Notes |
-|-------|------|-------|
-| `_id` | ObjectId | Identifier |
-| `property` | ObjectId (Property) | Reference |
-| `user` | ObjectId (User) | Liker |
-| `createdAt` | Date | Timestamp |
-| `updatedAt` | Date | Timestamp |
-
-Example:
+### Property
 ```json
 {
-  "_id":"66a1c3f9...",
-  "property":"665fa8f2...",
-  "user":"665fa112...",
-  "createdAt":"2025-07-10T13:01:20.000Z",
-  "updatedAt":"2025-07-10T13:01:20.000Z"
+  "_id": "665fa8f2...",
+  "title": "Cozy Apartment",
+  "description": "2-bed in downtown",
+  "price": 120000,
+  "type": "apartment",
+  "city": "Austin",
+  "state": "Texas",
+  "images": ["https://.../prop1.jpg"],
+  "forSale": true,
+  "createdBy": "665fa112...",
+  "createdAt": "2025-07-01T10:15:20.000Z",
+  "updatedAt": "2025-07-05T14:42:10.000Z"
 }
 ```
 
----
-
-## Bookmark Routes (`/api/bookmarks`)
-
-### `POST /api/bookmarks`
-Request:
-```json
-{ "propertyId":"665fa8f2..." }
-```
-Response (201): bookmark object.
-
-### `GET /api/bookmarks`
-Response:
-```json
-[ /* bookmarks */ ]
-```
-
-### `DELETE /api/bookmarks/:id`
-Response:
-```json
-{ "message":"Bookmark removed" }
-```
-
-### Bookmark Object Schema
-| Field | Type | Notes |
-|-------|------|-------|
-| `_id` | ObjectId | Identifier |
-| `property` | ObjectId (Property) | Reference |
-| `user` | ObjectId (User) | Owner |
-| `createdAt` | Date | Timestamp |
-| `updatedAt` | Date | Timestamp |
-
-Example:
+### Comment
 ```json
 {
-  "_id":"66a1c6a3...",
-  "property":"665fa8f2...",
-  "user":"665fa112...",
-  "createdAt":"2025-07-10T13:15:42.000Z",
-  "updatedAt":"2025-07-10T13:15:42.000Z"
+  "_id": "66a1c0f2...",
+  "property": "665fa8f2...",
+  "user": "665fa112...",
+  "content": "Looks great!",
+  "createdAt": "2025-07-10T12:30:11.000Z",
+  "updatedAt": "2025-07-10T12:30:11.000Z"
 }
 ```
 
----
-
-## Message Routes (`/api/messages`)
-
-### `POST /api/messages`
-Request:
-```json
-{ "receiverId":"665fa224...", "content":"Hello!" }
-```
-Response (201): message object.
-
-### `GET /api/messages/:withUserId`
-Response:
-```json
-[ /* messages */ ]
-```
-
-### `DELETE /api/messages/:id`
-Response:
-```json
-{ "message":"Message deletion recorded" }
-```
-
-### Message Object Schema
-| Field | Type | Notes |
-|-------|------|-------|
-| `_id` | ObjectId | Identifier |
-| `sender` | ObjectId (User) | Sender |
-| `receiver` | ObjectId (User) | Receiver |
-| `content` | String | Required |
-| `deletedBy` | ObjectId[] | Soft-delete tracking |
-| `createdAt` | Date | Timestamp |
-| `updatedAt` | Date | Timestamp |
-
-Example:
+### Like
 ```json
 {
-  "_id":"66a1c8db...",
-  "sender":"665fa112...",
-  "receiver":"665fa224...",
-  "content":"Hello!",
-  "deletedBy":[],
-  "createdAt":"2025-07-10T13:24:05.000Z",
-  "updatedAt":"2025-07-10T13:24:05.000Z"
+  "_id": "66a1c3f9...",
+  "property": "665fa8f2...",
+  "user": "665fa112...",
+  "createdAt": "2025-07-10T13:01:20.000Z",
+  "updatedAt": "2025-07-10T13:01:20.000Z"
 }
 ```
 
----
-
-## Admin Routes (`/api/admin`)
-
-### `GET /api/admin/users`
-Returns array of users (non-sensitive).
-
-### `PUT /api/admin/users/:id/promote`
-Response:
+### Bookmark
 ```json
-{ "message":"<username> promoted to admin" }
+{
+  "_id": "66a1c6a3...",
+  "property": "665fa8f2...",
+  "user": "665fa112...",
+  "createdAt": "2025-07-10T13:15:42.000Z",
+  "updatedAt": "2025-07-10T13:15:42.000Z"
+}
 ```
 
-### `PUT /api/admin/users/:id/demote`
-Response:
+### Message
 ```json
-{ "message":"<username> demoted to user" }
-```
-
-### `DELETE /api/admin/users/:id`
-Response:
-```json
-{ "message":"User deleted successfully" }
-```
-
-### `DELETE /api/admin/property/:id`
-Response:
-```json
-{ "message":"Property deleted by admin" }
-```
-
-### `DELETE /api/admin/comment/:id`
-Response:
-```json
-{ "message":"Comment deleted by admin" }
-```
-
-### `DELETE /api/admin/message/:id`
-Response:
-```json
-{ "message":"Message deleted by admin" }
+{
+  "_id": "66a1c8db...",
+  "sender": "665fa112...",
+  "receiver": "665fa224...",
+  "content": "Hello!",
+  "deletedBy": [],
+  "createdAt": "2025-07-10T13:24:05.000Z",
+  "updatedAt": "2025-07-10T13:24:05.000Z"
+}
 ```
 
 ---
@@ -429,13 +192,13 @@ Response:
 | Model | Field | Rule |
 |-------|-------|------|
 | User | username | Required, unique |
-| User | email | Required, unique, email |
+| User | email | Required, unique, email format |
 | User | password | Required, min length (e.g. 6+) |
 | Property | title | Required |
-| Property | price | Required, positive |
-| Property | type | Enum |
-| Property | state | Enum (US states) |
-| Property | images | Max 5 |
+| Property | price | Required, positive number |
+| Property | type | Enum (apartment|house|villa|building|store) |
+| Property | state | Enum (US states list) |
+| Property | images | Array length ≤ 5 |
 | Comment | content | Required |
 | Like | (user, property) | Unique pair |
 | Bookmark | (user, property) | Unique pair |
@@ -444,101 +207,105 @@ Response:
 ---
 
 ## Pagination & Sorting
+**Query params:** `page`, `limit`, `sort`.  
 Defaults: `page=1`, `limit=10` (cap 50).  
-Sort param: `sort=field` ascending, `sort=-field` descending. Supported fields: `createdAt`, `price` (extend as needed).
-
----
-
-## Status Codes
-| Endpoint | Success |
-|----------|---------|
-| POST /api/auth/register | 201 |
-| POST /api/auth/login | 200 |
-| POST /api/auth/logout | 200 |
-| POST /api/auth/forgot-password | 200 |
-| POST /api/auth/reset-password | 200 |
-| GET /api/properties | 200 |
-| POST /api/properties | 201 |
-| PUT /api/properties/:id | 200 |
-| DELETE /api/properties/:id | 200 |
-| POST /api/comments/:propertyId | 201 |
-| DELETE /api/comments/:id | 200 |
-| POST /api/likes | 200 |
-| POST /api/bookmarks | 201 |
-| POST /api/messages | 201 |
-
-Errors: 400 (validation), 401 (unauthorized), 403 (forbidden), 404 (not found), 409 (conflict), 500 (server).
-
----
-
-## Indexes
-| Collection | Index |
-|------------|-------|
-| properties | `{ state:1, city:1, type:1 }` |
-| properties | `{ createdAt:-1 }` |
-| likes | `{ user:1, property:1 }` unique |
-| bookmarks | `{ user:1, property:1 }` unique |
-| comments | `{ property:1, createdAt:-1 }` |
-| messages | `{ sender:1, receiver:1, createdAt:-1 }` |
-
----
-
-## Security
-| Aspect | Status | Recommendation |
-|--------|--------|---------------|
-| Password hashing | bcrypt | >=10 rounds |
-| Session cookie | HttpOnly | Add Secure + Strict in prod |
-| Validation | Joi | Apply everywhere |
-| Rate limiting | Pending | Add for auth & reset routes |
-| Helmet | Pending | Add `helmet()` |
-| Reset tokens | One-time | Store hashed only |
-| CORS | Credentials | Restrict origin |
-
----
-
-## Design Notes
-- Session-based auth (simplifies invalidation).
-- Flat JSON responses; pagination object wraps arrays.
-- Soft delete for messages only (others hard delete).
-- Image URLs stored directly (no binary).
-
----
-
-## Time & Locale
-All timestamps UTC ISO strings. Client handles localization.
-
----
-
-## Roadmap
-Notifications, reports, purpose field (`sale|rent`), property analytics, indexing refinements, rate limiting, test suite, i18n, conversation model (group chats).
-
----
-
-## Deployment
-1. Set env vars on host.  
-2. Use persistent session store (Redis/Mongo).  
-3. Enforce HTTPS (Secure cookies).  
-4. Restrict CORS origin.  
-5. Add structured logging & health endpoint (`/health`).
-
----
-
-## Logging & Monitoring
-Development: morgan. Production: add structured logger + uptime/health checks.
-
----
-
-## Error Response Shape (recommended)
+Sorting: `sort=createdAt` asc, `sort=-createdAt` desc, `sort=price` or `-price` (if implemented).  
+Paginated response shape:
 ```json
 {
-  "error":"ValidationError",
-  "message":"Invalid request body",
-  "details":[{ "field":"title","message":"Required" }]
+  "page": 1,
+  "totalPages": 5,
+  "totalItems": 42,
+  "itemsOnPage": 10,
+  "properties": [ /* ... */ ]
 }
 ```
 
 ---
 
-## License
-Add a license section if distributing publicly.
+## Status Codes
+| Endpoint (example) | Success | Notes |
+|--------------------|---------|-------|
+| POST /api/auth/register | 201 | User created |
+| POST /api/auth/login | 200 | Session set |
+| POST /api/properties | 201 | Property created |
+| POST /api/comments/:propertyId | 201 | Comment created |
+| POST /api/messages | 201 | Message created |
+| Other reads/updates/deletes | 200 | OK |
+| Validation error | 400 | Joi errors |
+| Unauthorized | 401 | Missing/expired session |
+| Forbidden | 403 | Role restriction |
+| Not found | 404 | Resource absent |
+| Conflict | 409 | Duplicate (user, like, bookmark) |
+| Server error | 500 | Unhandled |
 
+**Error JSON Shape:**
+```json
+{
+  "error": "ValidationError",
+  "message": "Invalid request body",
+  "details": [{ "field": "title", "message": "Required" }]
+}
+```
+
+---
+
+## Indexes
+| Collection | Index | Purpose |
+|------------|-------|---------|
+| properties | { state:1, city:1, type:1 } | Compound filter |
+| properties | { createdAt:-1 } | Recent first |
+| likes | { user:1, property:1 } unique | One like per user/property |
+| bookmarks | { user:1, property:1 } unique | One bookmark per user/property |
+| comments | { property:1, createdAt:-1 } | Fast property comments |
+| messages | { sender:1, receiver:1, createdAt:-1 } | Conversations |
+
+---
+
+## Security
+- Session cookie: HttpOnly (add `Secure` + `SameSite=Strict` in production).
+- Password hashing: bcrypt (≥10 rounds).
+- Validation enforced with Joi for all mutating routes.
+- Add Helmet for security headers (CSP, HSTS, X-Content-Type-Options, Referrer-Policy).
+- Implement rate limiting (login / password reset) to mitigate brute force.
+- Reset tokens: single-use, short expiry (e.g. 15–30 min), store hashed token only.
+- Restrict CORS origin to frontend domain in production.
+
+---
+
+## Logging & Monitoring
+- Development: morgan (`dev` format).
+- Production: structured logger (winston/pino) + error aggregation.
+- Suggested health endpoint: `GET /health` -> `{ "status":"ok","uptime":123.45,"timestamp":"2025-07-19T12:00:00.000Z" }`.
+
+---
+
+## Roadmap
+- Add `purpose` field (`sale|rent`).
+- Notifications & real-time updates.
+- Reports / moderation workflow.
+- Property analytics (views, favorites counts).
+- Rate limiting & brute-force protection.
+- Test suite (Jest + Supertest).
+- Group conversations model.
+- Internationalization (states/currencies).
+
+---
+
+## Design Notes
+- Session-based auth chosen for server-side invalidation simplicity.
+- Flat JSON responses (arrays or paginated object); minimal wrapping.
+- Images stored as external URLs (Cloudinary), not binary in Mongo.
+- Messages support soft delete via `deletedBy` array (others hard delete).
+
+---
+
+## Deployment
+1. Configure environment variables on host.
+2. Use persistent session store (Mongo / Redis) – avoid in-memory store in production.
+3. Enforce HTTPS; set cookie `Secure`.
+4. Restrict CORS to production frontend origin.
+5. Add process manager (PM2 / Docker) and log rotation.
+6. Include health check & readiness probes.
+
+---
