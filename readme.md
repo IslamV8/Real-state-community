@@ -1,290 +1,247 @@
 # Real Estate Community API
 
-A RESTful backend for a real-estate community application built with Node.js, Express, MongoDB, and session-based authentication. Users can register, authenticate, reset passwords, create and browse properties, comment, like, bookmark, and send direct messages. Admins can moderate content and manage users.
+A RESTful backend for a real-estate community platform (properties, comments, likes, bookmarks, messaging, admin moderation). Session-based authentication with HTTP-only cookies.
+
+---
+
+## Tech Stack
+| Layer | Technology |
+|-------|------------|
+| Runtime | Node.js (>=20) |
+| Framework | Express |
+| Database | MongoDB + Mongoose |
+| Auth | express-session (cookie-based) |
+| Validation | Joi |
+| Uploads | Multer + Cloudinary |
+| Security | bcrypt, cors, cookie-parser |
+| Logging | morgan (dev) |
+
+---
+
+## Installation
+```bash
+git clone <repo-url>
+cd real-state-community
+npm install
+npm run dev
+```
+Default port: 5000 (override with PORT).
+
+---
+
+## Environment Variables (names only)
+`MONGODB_URI`, `SESSION_SECRET`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`, `APP_BASE_URL`, `FRONTEND_ORIGIN`, `NODE_ENV`.
+
+---
+
+## Authentication Flow
+1. Register / login returns user JSON + sets `sid` HttpOnly cookie (`SameSite=Lax`, add `Secure` in production).  
+2. Subsequent requests send cookie automatically.  
+3. Logout destroys session.  
+4. Forgot password issues short-lived reset token (email).  
+5. Reset password verifies token, updates hash, invalidates token.  
+6. Session expiry via `cookie.maxAge` (e.g. 7 days).
 
 ---
 
 ## Authentication Routes (`/api/auth`)
 
-All authentication uses **cookie-based sessions** (`HttpOnly`, `SameSite=Lax`).
-
 ### `POST /api/auth/register`
-**Description:** Create a new user session.  
-**Headers:** `Content-Type: application/json`  
-**Body:**
+Request:
 ```json
-{
-  "username": "johndoe",
-  "displayName": "John Doe",
-  "email": "john@example.com",
-  "password": "secret123"
-}
+{ "username":"johndoe", "displayName":"John Doe", "email":"john@example.com", "password":"secret123" }
 ```
-**Response:**
+Response (201):
 ```json
-{
-  "id": "60f7a1b2c3d4e5f67890abcd",
-  "username": "johndoe",
-  "displayName": "John Doe",
-  "email": "john@example.com",
-  "role": "user"
-}
+{ "id":"<id>", "username":"johndoe", "displayName":"John Doe", "email":"john@example.com", "role":"user" }
 ```
-**Cookie Set:** `sid=<session-id>; HttpOnly; SameSite=Lax`
 
 ### `POST /api/auth/login`
-**Description:** Authenticate an existing user.  
-**Headers:** `Content-Type: application/json`  
-**Body:**
+Request:
 ```json
-{
-  "username": "johndoe",
-  "password": "secret123"
-}
+{ "username":"johndoe", "password":"secret123" }
 ```
-**Response:**
-```json
-{
-  "id": "60f7a1b2c3d4e5f67890abcd",
-  "username": "johndoe",
-  "displayName": "John Doe",
-  "email": "john@example.com",
-  "role": "user"
-}
-```
-**Cookie Set:** `sid=<session-id>; HttpOnly; SameSite=Lax`
+Response (200): same shape as register.
 
 ### `POST /api/auth/logout`
-**Description:** Destroy the active session.  
-**Headers:** Session cookie.  
-**Body:** _none_  
-**Response:**
+Response:
 ```json
-{ "message": "Logged out successfully" }
+{ "message":"Logged out successfully" }
 ```
-**Cookie Cleared:** `sid`
 
 ### `POST /api/auth/forgot-password`
-**Description:** Issue a password reset token and email it.  
-**Headers:** `Content-Type: application/json`  
-**Body:**
+Request:
 ```json
-{ "email": "john@example.com" }
+{ "email":"john@example.com" }
 ```
-**Response:**
+Response:
 ```json
-{ "message": "Reset link sent to your email." }
+{ "message":"Reset link sent to your email." }
 ```
 
 ### `POST /api/auth/reset-password`
-**Description:** Reset a password using a valid token.  
-**Headers:** `Content-Type: application/json`  
-**Body:**
+Request:
 ```json
-{
-  "token": "the-reset-token",
-  "newPassword": "newSecret123"
-}
+{ "token":"<token>", "newPassword":"newSecret123" }
 ```
-**Response:**
+Response:
 ```json
-{ "message": "Password has been reset successfully." }
+{ "message":"Password has been reset successfully." }
+```
+
+### User Object Schema
+| Field | Type | Notes |
+|-------|------|-------|
+| `_id` | ObjectId | Identifier |
+| `username` | String | Unique |
+| `displayName` | String | Optional |
+| `email` | String | Unique |
+| `role` | String (user|admin) | Authorization |
+| `createdAt` | Date | Timestamp |
+| `updatedAt` | Date | Timestamp |
+
+Example:
+```json
+{ "_id":"665fa112...", "username":"johndoe", "displayName":"John Doe", "email":"john@example.com", "role":"user", "createdAt":"2025-07-01T09:50:00.000Z", "updatedAt":"2025-07-05T14:10:22.000Z" }
 ```
 
 ---
 
 ## Property Routes (`/api/properties`)
 
-All property endpoints require authentication (session cookie).
-
 ### `GET /api/properties`
-**Query Parameters (optional):** `page`, `limit`, `state`, `city`, `type`, `forSale`, `minPrice`, `maxPrice`  
-**Response:**
+Query params: `page`, `limit`, `state`, `city`, `type`, `forSale`, `minPrice`, `maxPrice`, `sort` (e.g. `-createdAt`, `price`).  
+Response:
 ```json
 {
-  "page": 1,
-  "totalPages": 5,
-  "totalItems": 42,
-  "itemsOnPage": 10,
-  "properties": [ /* array of property objects */ ]
+  "page":1,
+  "totalPages":5,
+  "totalItems":42,
+  "itemsOnPage":10,
+  "properties":[ /* property objects */ ]
 }
 ```
 
 ### `GET /api/properties/:id`
-**Description:** Fetch one property by ID.  
-**Response:**
+Response:
 ```json
-{ /* single property object */ }
+{ /* property object */ }
 ```
 
 ### `POST /api/properties`
-**Description:** Create a property.  
-**Headers:** `Content-Type: application/json`  
-**Body:**
+Request:
 ```json
 {
-  "title": "Cozy Apartment",
-  "description": "2-bed in downtown",
-  "price": 120000,
-  "city": "Austin",
-  "state": "Texas",
-  "type": "apartment",
-  "forSale": true,
-  "images": []
+  "title":"Cozy Apartment",
+  "description":"2-bed in downtown",
+  "price":120000,
+  "city":"Austin",
+  "state":"Texas",
+  "type":"apartment",
+  "forSale":true,
+  "images":[]
 }
 ```
-**Response:**
-```json
-{ /* created property object */ }
-```
+Response (201): created object.
 
 ### `PUT /api/properties/:id`
-**Description:** Update a property (owner or admin).  
-**Body (partial):**
+Partial update:
 ```json
-{ "price": 125000, "forSale": false }
-```
-**Response:**
-```json
-{ /* updated property object */ }
+{ "price":125000, "forSale":false }
 ```
 
 ### `DELETE /api/properties/:id`
-**Description:** Delete a property (owner or admin).  
-**Response:**
+Response:
 ```json
-{ "message": "Property deleted successfully" }
+{ "message":"Property deleted successfully" }
 ```
 
 ### `POST /api/properties/:id/images`
-**Description:** Upload up to 5 images (multipart, key: images).  
-**Headers:** `Content-Type: multipart/form-data`  
-**Response:**
-```json
-{ /* property object with new image URLs */ }
-```
+Multipart (key: `images`, up to 5 files). Returns updated property.
 
-### Property Object Schema (API Response Shape)
+### Property Object Schema
+| Field | Type | Notes |
+|-------|------|------|
+| `_id` | ObjectId | Identifier |
+| `title` | String | Required |
+| `description` | String | Required |
+| `price` | Number | Required |
+| `type` | String enum | `apartment|house|villa|building|store` |
+| `city` | String | Required |
+| `state` | String enum | US state |
+| `images` | String[] | Max 5 |
+| `forSale` | Boolean | Default `true` (`false` = rent) |
+| `createdBy` | ObjectId (User) | Owner reference |
+| `createdAt` | Date | Timestamp |
+| `updatedAt` | Date | Timestamp |
 
-**Fields:**
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `_id` | ObjectId | Yes | Auto-generated |
-| `title` | String | Yes | Property title |
-| `description` | String | Yes | Description text |
-| `price` | Number | Yes | Current price |
-| `type` | String (enum) | Yes | `apartment` \| `house` \| `villa` \| `building` \| `store` |
-| `city` | String | Yes | City name |
-| `state` | String (enum) | Yes | US state (from predefined list) |
-| `images` | String[] | No | Image URLs (max 5 recommended) |
-| `forSale` | Boolean | No (default: true) | `true` = for sale, `false` interpreted as for rent |
-| `createdBy` | ObjectId (User) | Yes | Reference to user |
-| `createdAt` | Date | Yes | Timestamp (auto) |
-| `updatedAt` | Date | Yes | Timestamp (auto) |
-
-**Single Object Example:**
+Example:
 ```json
 {
-  "_id": "665fa8f2b7c1d243c0e8d91a",
-  "title": "Cozy Apartment",
-  "description": "2-bed in downtown",
-  "price": 120000,
-  "type": "apartment",
-  "city": "Austin",
-  "state": "Texas",
-  "images": ["https://.../prop1.jpg"],
-  "forSale": true,
-  "createdBy": "665fa112b7c1d243c0e8d8ff",
-  "createdAt": "2025-07-01T10:15:20.000Z",
-  "updatedAt": "2025-07-05T14:42:10.000Z"
+  "_id":"665fa8f2...",
+  "title":"Cozy Apartment",
+  "description":"2-bed in downtown",
+  "price":120000,
+  "type":"apartment",
+  "city":"Austin",
+  "state":"Texas",
+  "images":["https://.../prop1.jpg"],
+  "forSale":true,
+  "createdBy":"665fa112...",
+  "createdAt":"2025-07-01T10:15:20.000Z",
+  "updatedAt":"2025-07-05T14:42:10.000Z"
 }
 ```
-
-**Paginated List Example:**
-```json
-{
-  "page": 1,
-  "totalPages": 5,
-  "totalItems": 74,
-  "itemsOnPage": 15,
-  "properties": [
-    {
-      "_id": "665fa8f2b7c1d243c0e8d91a",
-      "title": "Cozy Apartment",
-      "price": 120000,
-      "type": "apartment",
-      "city": "Austin",
-      "state": "Texas",
-      "forSale": true,
-      "images": ["https://.../prop1.jpg"]
-    }
-  ]
-}
-```
-
-**Filtering Parameters:**
-| Param | Example | Description |
-|-------|---------|-------------|
-| `state` | `?state=Texas` | Filter by state |
-| `city` | `?city=Austin` | Filter by city |
-| `type` | `?type=apartment` | Filter by property type |
-| `forSale` | `?forSale=true` | For sale (`true`) or for rent (`false`) |
-| `minPrice` | `?minPrice=50000` | Minimum price |
-| `maxPrice` | `?maxPrice=200000` | Maximum price |
-| Combined | `?state=Texas&type=apartment&minPrice=80000` | Compound filters |
-
-**Frontend Notes:**
-- Use exact field names (case-sensitive).
-- Interpret `forSale: false` as rental listings (consider adding a dedicated `purpose` field later).
-- Enforce client-side limit of 5 images before upload.
-- Implement dropdowns for `type` and `state` based on enums.
-- Consider adding indexes on `state`, `city`, `type` and a compound `{ state, city, type }` for scalability.
-
-**Optional Future Enhancements:**
-| Enhancement | Reason |
-|-------------|--------|
-| Add `purpose: "sale" | "rent"` | Explicit intent |
-| Add `coverImage` | Faster listing rendering |
-| Add `views`, `favoritesCount` | Analytics & engagement |
-| Virtual `id` field | Front-end convenience |
-| Compound index `{ state, city, type }` | Query performance |
 
 ---
 
 ## Comment Routes (`/api/comments`)
 
 ### `POST /api/comments/:propertyId`
-**Body:**
+Request:
 ```json
-{ "content": "Looks great!" }
+{ "content":"Looks great!" }
 ```
-**Response:**
-```json
-{ /* created comment object */ }
-```
+Response (201): comment object.
 
 ### `GET /api/comments/:propertyId`
-**Description:** List comments for a property.  
-**Response:**
+Response:
 ```json
-[ /* array of comments */ ]
+[ /* comments */ ]
 ```
 
 ### `PUT /api/comments/:id`
-**Body:**
+Request:
 ```json
-{ "content": "Updated comment" }
-```
-**Response:**
-```json
-{ /* updated comment object */ }
+{ "content":"Updated comment" }
 ```
 
 ### `DELETE /api/comments/:id`
-**Description:** Delete own comment.  
-**Response:**
+Response:
 ```json
-{ "message": "Deleted" }
+{ "message":"Deleted" }
+```
+
+### Comment Object Schema
+| Field | Type | Notes |
+|-------|------|-------|
+| `_id` | ObjectId | Identifier |
+| `property` | ObjectId (Property) | Reference |
+| `user` | ObjectId (User) | Author |
+| `content` | String | Required |
+| `createdAt` | Date | Timestamp |
+| `updatedAt` | Date | Timestamp |
+
+Example:
+```json
+{
+  "_id":"66a1c0f2...",
+  "property":"665fa8f2...",
+  "user":"665fa112...",
+  "content":"Looks great!",
+  "createdAt":"2025-07-10T12:30:11.000Z",
+  "updatedAt":"2025-07-10T12:30:11.000Z"
+}
 ```
 
 ---
@@ -292,27 +249,45 @@ All property endpoints require authentication (session cookie).
 ## Like Routes (`/api/likes`)
 
 ### `POST /api/likes`
-**Body:**
+Request:
 ```json
-{ "propertyId": "60f7..." }
+{ "propertyId":"665fa8f2..." }
 ```
-**Response:**
+Response:
 ```json
-{ "liked": true, "likeId": "..." }
+{ "liked":true, "likeId":"66a1c3f9..." }
 ```
 
 ### `GET /api/likes/property/:propertyId`
-**Description:** List likes on a property.  
-**Response:**
+Response:
 ```json
-[ /* array of like objects */ ]
+[ /* like objects */ ]
 ```
 
 ### `DELETE /api/likes/:id`
-**Description:** Remove a like.  
-**Response:**
+Response:
 ```json
-{ "message": "Like removed" }
+{ "message":"Like removed" }
+```
+
+### Like Object Schema
+| Field | Type | Notes |
+|-------|------|-------|
+| `_id` | ObjectId | Identifier |
+| `property` | ObjectId (Property) | Reference |
+| `user` | ObjectId (User) | Liker |
+| `createdAt` | Date | Timestamp |
+| `updatedAt` | Date | Timestamp |
+
+Example:
+```json
+{
+  "_id":"66a1c3f9...",
+  "property":"665fa8f2...",
+  "user":"665fa112...",
+  "createdAt":"2025-07-10T13:01:20.000Z",
+  "updatedAt":"2025-07-10T13:01:20.000Z"
+}
 ```
 
 ---
@@ -320,27 +295,42 @@ All property endpoints require authentication (session cookie).
 ## Bookmark Routes (`/api/bookmarks`)
 
 ### `POST /api/bookmarks`
-**Body:**
+Request:
 ```json
-{ "propertyId": "60f7..." }
+{ "propertyId":"665fa8f2..." }
 ```
-**Response:**
-```json
-{ /* created bookmark object */ }
-```
+Response (201): bookmark object.
 
 ### `GET /api/bookmarks`
-**Description:** List current user's bookmarks.  
-**Response:**
+Response:
 ```json
-[ /* array of bookmark objects */ ]
+[ /* bookmarks */ ]
 ```
 
 ### `DELETE /api/bookmarks/:id`
-**Description:** Remove a bookmark.  
-**Response:**
+Response:
 ```json
-{ "message": "Bookmark removed" }
+{ "message":"Bookmark removed" }
+```
+
+### Bookmark Object Schema
+| Field | Type | Notes |
+|-------|------|-------|
+| `_id` | ObjectId | Identifier |
+| `property` | ObjectId (Property) | Reference |
+| `user` | ObjectId (User) | Owner |
+| `createdAt` | Date | Timestamp |
+| `updatedAt` | Date | Timestamp |
+
+Example:
+```json
+{
+  "_id":"66a1c6a3...",
+  "property":"665fa8f2...",
+  "user":"665fa112...",
+  "createdAt":"2025-07-10T13:15:42.000Z",
+  "updatedAt":"2025-07-10T13:15:42.000Z"
+}
 ```
 
 ---
@@ -348,27 +338,46 @@ All property endpoints require authentication (session cookie).
 ## Message Routes (`/api/messages`)
 
 ### `POST /api/messages`
-**Body:**
+Request:
 ```json
-{ "receiverId": "60f7...", "content": "Hello!" }
+{ "receiverId":"665fa224...", "content":"Hello!" }
 ```
-**Response:**
-```json
-{ /* created message object */ }
-```
+Response (201): message object.
 
 ### `GET /api/messages/:withUserId`
-**Description:** Conversation with another user.  
-**Response:**
+Response:
 ```json
-[ /* array of messages */ ]
+[ /* messages */ ]
 ```
 
 ### `DELETE /api/messages/:id`
-**Description:** Soft-delete (recorded deletion) for the sender or per implemented logic.  
-**Response:**
+Response:
 ```json
-{ "message": "Message deletion recorded" }
+{ "message":"Message deletion recorded" }
+```
+
+### Message Object Schema
+| Field | Type | Notes |
+|-------|------|-------|
+| `_id` | ObjectId | Identifier |
+| `sender` | ObjectId (User) | Sender |
+| `receiver` | ObjectId (User) | Receiver |
+| `content` | String | Required |
+| `deletedBy` | ObjectId[] | Soft-delete tracking |
+| `createdAt` | Date | Timestamp |
+| `updatedAt` | Date | Timestamp |
+
+Example:
+```json
+{
+  "_id":"66a1c8db...",
+  "sender":"665fa112...",
+  "receiver":"665fa224...",
+  "content":"Hello!",
+  "deletedBy":[],
+  "createdAt":"2025-07-10T13:24:05.000Z",
+  "updatedAt":"2025-07-10T13:24:05.000Z"
+}
 ```
 
 ---
@@ -376,65 +385,160 @@ All property endpoints require authentication (session cookie).
 ## Admin Routes (`/api/admin`)
 
 ### `GET /api/admin/users`
-**Description:** List users (non-sensitive fields).  
-**Response:**
-```json
-[ /* users */ ]
-```
+Returns array of users (non-sensitive).
 
 ### `PUT /api/admin/users/:id/promote`
-**Description:** Promote a user to admin.  
-**Response:**
+Response:
 ```json
-{ "message": "username promoted to admin" }
+{ "message":"<username> promoted to admin" }
 ```
 
 ### `PUT /api/admin/users/:id/demote`
-**Description:** Demote an admin to user.  
-**Response:**
+Response:
 ```json
-{ "message": "username demoted to user" }
+{ "message":"<username> demoted to user" }
 ```
 
 ### `DELETE /api/admin/users/:id`
-**Description:** Delete a user.  
-**Response:**
+Response:
 ```json
-{ "message": "User deleted successfully" }
+{ "message":"User deleted successfully" }
 ```
 
 ### `DELETE /api/admin/property/:id`
-**Description:** Delete any property.  
-**Response:**
+Response:
 ```json
-{ "message": "Property deleted by admin" }
+{ "message":"Property deleted by admin" }
 ```
 
 ### `DELETE /api/admin/comment/:id`
-**Description:** Delete any comment.  
-**Response:**
+Response:
 ```json
-{ "message": "Comment deleted by admin" }
+{ "message":"Comment deleted by admin" }
 ```
 
 ### `DELETE /api/admin/message/:id`
-**Description:** Delete any message.  
-**Response:**
+Response:
 ```json
-{ "message": "Message deleted by admin" }
+{ "message":"Message deleted by admin" }
 ```
 
 ---
 
-## Notes
-
-- **Error Handling:** Centralized middleware.  
-- **Validation:** Joi + request body validator.  
-- **CORS & Cookies:** `cors({ credentials: true })` + `cookie-parser` (ensure client sets `credentials: "include"` or `withCredentials: true`).
+## Validation Summary
+| Model | Field | Rule |
+|-------|-------|------|
+| User | username | Required, unique |
+| User | email | Required, unique, email |
+| User | password | Required, min length (e.g. 6+) |
+| Property | title | Required |
+| Property | price | Required, positive |
+| Property | type | Enum |
+| Property | state | Enum (US states) |
+| Property | images | Max 5 |
+| Comment | content | Required |
+| Like | (user, property) | Unique pair |
+| Bookmark | (user, property) | Unique pair |
+| Message | content | Required |
 
 ---
 
-## Front-End Integration
+## Pagination & Sorting
+Defaults: `page=1`, `limit=10` (cap 50).  
+Sort param: `sort=field` ascending, `sort=-field` descending. Supported fields: `createdAt`, `price` (extend as needed).
 
-Use `fetch` with `credentials: "include"` or Axios with `withCredentials: true` to send the session cookie on every request.
+---
+
+## Status Codes
+| Endpoint | Success |
+|----------|---------|
+| POST /api/auth/register | 201 |
+| POST /api/auth/login | 200 |
+| POST /api/auth/logout | 200 |
+| POST /api/auth/forgot-password | 200 |
+| POST /api/auth/reset-password | 200 |
+| GET /api/properties | 200 |
+| POST /api/properties | 201 |
+| PUT /api/properties/:id | 200 |
+| DELETE /api/properties/:id | 200 |
+| POST /api/comments/:propertyId | 201 |
+| DELETE /api/comments/:id | 200 |
+| POST /api/likes | 200 |
+| POST /api/bookmarks | 201 |
+| POST /api/messages | 201 |
+
+Errors: 400 (validation), 401 (unauthorized), 403 (forbidden), 404 (not found), 409 (conflict), 500 (server).
+
+---
+
+## Indexes
+| Collection | Index |
+|------------|-------|
+| properties | `{ state:1, city:1, type:1 }` |
+| properties | `{ createdAt:-1 }` |
+| likes | `{ user:1, property:1 }` unique |
+| bookmarks | `{ user:1, property:1 }` unique |
+| comments | `{ property:1, createdAt:-1 }` |
+| messages | `{ sender:1, receiver:1, createdAt:-1 }` |
+
+---
+
+## Security
+| Aspect | Status | Recommendation |
+|--------|--------|---------------|
+| Password hashing | bcrypt | >=10 rounds |
+| Session cookie | HttpOnly | Add Secure + Strict in prod |
+| Validation | Joi | Apply everywhere |
+| Rate limiting | Pending | Add for auth & reset routes |
+| Helmet | Pending | Add `helmet()` |
+| Reset tokens | One-time | Store hashed only |
+| CORS | Credentials | Restrict origin |
+
+---
+
+## Design Notes
+- Session-based auth (simplifies invalidation).
+- Flat JSON responses; pagination object wraps arrays.
+- Soft delete for messages only (others hard delete).
+- Image URLs stored directly (no binary).
+
+---
+
+## Time & Locale
+All timestamps UTC ISO strings. Client handles localization.
+
+---
+
+## Roadmap
+Notifications, reports, purpose field (`sale|rent`), property analytics, indexing refinements, rate limiting, test suite, i18n, conversation model (group chats).
+
+---
+
+## Deployment
+1. Set env vars on host.  
+2. Use persistent session store (Redis/Mongo).  
+3. Enforce HTTPS (Secure cookies).  
+4. Restrict CORS origin.  
+5. Add structured logging & health endpoint (`/health`).
+
+---
+
+## Logging & Monitoring
+Development: morgan. Production: add structured logger + uptime/health checks.
+
+---
+
+## Error Response Shape (recommended)
+```json
+{
+  "error":"ValidationError",
+  "message":"Invalid request body",
+  "details":[{ "field":"title","message":"Required" }]
+}
+```
+
+---
+
+## License
+Add a license section if distributing publicly.
 
